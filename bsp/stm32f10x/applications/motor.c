@@ -431,17 +431,17 @@ void Initial_Motor(unsigned char MotorID, unsigned char StepDive,unsigned int ma
 		pmotor->CurrentPosition_Pulse=0;
 		pmotor->StartTableLength=STEP_AA+STEP_UA+STEP_RA+1; //加速表长度
 		pmotor->StopTableLength=STEP_AA+STEP_UA+STEP_RA; //减速表长
-		pmotor->Counter_Table=MotorTimeTable;
-		pmotor->Step_Table=MotorStepTable;
+		pmotor->Counter_Table=MotorTimeTable;//加速时间表
+		pmotor->Step_Table=MotorStepTable;//加速脉冲表
 
-		pmotor->CurrentIndex=0;
-		pmotor->speedenbale=0;
+		pmotor->CurrentIndex=0;//当前位置
+		pmotor->speedenbale=0;//不使能速度控制
 		pmotor->StartSteps=0;                  //必须清零，后面是累加，否则会把前一次的加上
 		pmotor->StopSteps=0;                   //同上
 		for(i=0;i<pmotor->StartTableLength;i++)
-		 pmotor->StartSteps+=pmotor->Step_Table[i];
+		 pmotor->StartSteps+=pmotor->Step_Table[i];//加速所需步数
 		for(i=0;i<pmotor->StopTableLength;i++)
-		 pmotor->StopSteps+=pmotor->Step_Table[i+pmotor->StartTableLength];
+		 pmotor->StopSteps+=pmotor->Step_Table[i+pmotor->StartTableLength];//停止所需步数
 
 		pmotor->TIMx->ARR =pmotor->Counter_Table[0]; //设置周期
 		pmotor->TIMx->CCR1 =pmotor->Counter_Table[0]>>1;       //设置占空比
@@ -600,6 +600,8 @@ float GetFreAtTime(float fstart,float faa,float taa,float tua,float tra,float t)
 }
  
  /*计算S型曲线算法的每一步定时器周期及步进数*/
+                                   //启动频率，     加加速度，     加加速时间，     匀加速时间，   减速时间
+
 void CalcMotorPeriStep_CPF(float fstart,float faa,float taa,float tua,float tra,uint16_t MotorTimeTable[],uint16_t MotorStepTable[])
 {
   int  i;
@@ -640,6 +642,7 @@ void CalcMotorPeriStep_CPF(float fstart,float faa,float taa,float tua,float tra,
 void MotorRunParaInitial(void)
 { 
 	/*FIXME:用户可以改变该参数实现S型曲线的升降特性*/ 
+						//启动频率，加加速度，加加速时间，匀加速时间，减速时间
 	CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor1TimeTable,Motor1StepTable); 
   CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor2TimeTable,Motor2StepTable); 	
 	CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor3TimeTable,Motor3StepTable); 	
