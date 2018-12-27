@@ -2,28 +2,28 @@
 #include "include.h" 
 #include "ringbuffer.h"
 
-volatile uint8_t USART1_TxBuffer[USART1TXSIZE];	     	//串口1发送缓冲区
-volatile uint16_t PTxBufferUSART11=0;				 					//串口1发送前向位置
-volatile uint16_t PTxBufferUSART12=0;				 					//串口1发送后向位置，后向-前向=未发送的数据
-volatile uint16_t USART1_TxCounter =0;				 				//串口1发送计数
-volatile uint16_t USART1_RxCounter =0; 				 				//串口1接收计数
-volatile uint16_t USART1_NbrOfDataToTransfer=0;		 		//串口1要发送的数据个数
-volatile uint8_t USART1_RxBuffer[USART1RXSIZE];				 					//串口1接收缓冲区
+volatile uint8_t USART1_TxBuffer[USART1TXSIZE];	     			//串口1发送缓冲区
+volatile uint16_t PTxBufferUSART11=0;				 			//串口1发送前向位置
+volatile uint16_t PTxBufferUSART12=0;				 			//串口1发送后向位置，后向-前向=未发送的数据
+volatile uint16_t USART1_TxCounter =0;				 			//串口1发送计数
+volatile uint16_t USART1_RxCounter =0; 				 			//串口1接收计数
+volatile uint16_t USART1_NbrOfDataToTransfer=0;		 			//串口1要发送的数据个数
+volatile uint8_t USART1_RxBuffer[USART1RXSIZE];				 	//串口1接收缓冲区
 volatile uint16_t PRxBufferUSART11=0;
 volatile uint16_t PRxBufferUSART12=0;
 volatile uint8_t USART1_NbrOfDataReceived=0;		 			//串口1要接收的数据个数
-volatile uint8_t USART1_Received_Flag=0;			 				//串口1收到数据标志，1：接收到数据，0：没有接收到数据
+volatile uint8_t USART1_Received_Flag=0;			 			//串口1收到数据标志，1：接收到数据，0：没有接收到数据
 struct rt_ringbuffer rb_recv;
 
-#define F2TIME_PARA				12000000   									//将频率值转换为定时器寄存器值得转换参数
-#define STEP_PARA					10	   											//任意时刻转动步数修正因子
-#define STEP_AA						31       										//加加速阶段，离散化点数
-#define STEP_UA						31			  									//匀加速阶段，离散化点数
-#define STEP_RA						31													//减加速阶段，离散化点数
+#define F2TIME_PARA				12000000   						//将频率值转换为定时器寄存器值得转换参数
+#define STEP_PARA					10	   						//任意时刻转动步数修正因子
+#define STEP_AA						31       					//加加速阶段，离散化点数
+#define STEP_UA						31			  				//匀加速阶段，离散化点数
+#define STEP_RA						31							//减加速阶段，离散化点数
 
-#define STEP_SPTA					20													//SPTA最大速度等级
-#define MAXSPEED_SPTA			80000												//SPTA最大速度
-#define ACCSPEED_SPTA			150000											//SPTA加速度
+#define STEP_SPTA					20							//SPTA最大速度等级
+#define MAXSPEED_SPTA			80000							//SPTA最大速度
+#define ACCSPEED_SPTA			150000							//SPTA加速度
 
 	
 uint16_t Motor1TimeTable[2*(STEP_AA+STEP_UA+STEP_RA)+1] = { 0};
@@ -583,16 +583,23 @@ void Motor_Reinitial(unsigned char MotorID)
 }
  
 /*根据S型曲线参数获取某个时刻的频率*/
+						//启动频率，加加速度，加加速时间，匀加速时间，减速时间，某时刻
+
 float GetFreAtTime(float fstart,float faa,float taa,float tua,float tra,float t)
 {
 		//根据公式计算从开始到最高速过冲中，t时刻的转动频率
-	  if(t>=0&&t<=taa){
+	  if(t>=0&&t<=taa)
+	  	{
 			//加加速阶段
 			return fstart+0.5*faa*t*t;
-		}else if(taa<t&&t<=(taa+tua)){
+		}
+		else if(taa<t&&t<=(taa+tua))
+		{
 			//匀加速阶段
 			return fstart+0.5*faa*taa*taa+(t-taa)*faa*taa;
-		}else if((taa+tua)<t&&t<=(taa+tua+tra)){
+		}
+		else if((taa+tua)<t&&t<=(taa+tua+tra))
+		{
 			//减加速阶段
 			return fstart+0.5*faa*taa*taa+(tua)*faa*taa+0.5*faa*taa*tra-0.5*faa*taa*(taa+tua+tra-t)*(taa+tua+tra-t)/(tra);
 		}		
@@ -607,30 +614,31 @@ void CalcMotorPeriStep_CPF(float fstart,float faa,float taa,float tua,float tra,
   int  i;
 	float fi;
 	
-	for(i=0;i<STEP_AA;i++)
+	for(i=0;i<STEP_AA;i++)//加加速阶段
 	{
+	//			启动频率，加加速度，加加速时间，均加速时间，减加速时间，加加速/加加速离散化点数*对应个数
 		fi=GetFreAtTime(fstart,faa,taa,tua,tra,taa/STEP_AA*i);
-		MotorTimeTable[i]=F2TIME_PARA/fi;
-		MotorStepTable[i]=fi*(taa/STEP_AA)/STEP_PARA;
+		MotorTimeTable[i]=F2TIME_PARA/fi;//脉冲频率表
+		MotorStepTable[i]=fi*(taa/STEP_AA)/STEP_PARA;//步进表
 	}
-	for(i=STEP_AA;i<STEP_AA+STEP_UA;i++)
+	for(i=STEP_AA;i<STEP_AA+STEP_UA;i++)//匀加速阶段
 	{
 		fi=GetFreAtTime(fstart,faa,taa,tua,tra,taa+(tua/STEP_UA)*(i-STEP_AA));
 		MotorTimeTable[i]=F2TIME_PARA/fi;
 		MotorStepTable[i]=fi*(tua/STEP_UA)/STEP_PARA;
 	}
-	for(i=STEP_AA+STEP_UA;i<STEP_AA+STEP_UA+STEP_RA;i++)
+	for(i=STEP_AA+STEP_UA;i<STEP_AA+STEP_UA+STEP_RA;i++)//减加速阶段
 	{
 		fi=GetFreAtTime(fstart,faa,taa,tua,tra,taa+tua+tra/STEP_RA*(i-STEP_AA-STEP_UA));
 		MotorTimeTable[i]=F2TIME_PARA/fi;
 		MotorStepTable[i]=fi*(tra/STEP_RA)/STEP_PARA;
 	}
-	fi=GetFreAtTime(fstart,faa,taa,tua,tra,taa+tua+tra);
+	fi=GetFreAtTime(fstart,faa,taa,tua,tra,taa+tua+tra);//加速完成后
 	MotorTimeTable[STEP_AA+STEP_UA+STEP_RA]=F2TIME_PARA/fi;
 	MotorStepTable[STEP_AA+STEP_UA+STEP_RA]=fi*(tra/STEP_RA)/STEP_PARA;
 	
 	
-	for(i=STEP_AA+STEP_UA+STEP_RA+1;i<2*(STEP_AA+STEP_UA+STEP_RA)+1;i++)
+	for(i=STEP_AA+STEP_UA+STEP_RA+1;i<2*(STEP_AA+STEP_UA+STEP_RA)+1;i++)//将加速阶段倒序装入减速阶段
 	{ 
 		MotorTimeTable[i]=MotorTimeTable[2*(STEP_AA+STEP_UA+STEP_RA)-i];
 		MotorStepTable[i]=MotorStepTable[2*(STEP_AA+STEP_UA+STEP_RA)-i];
@@ -644,7 +652,7 @@ void MotorRunParaInitial(void)
 	/*FIXME:用户可以改变该参数实现S型曲线的升降特性*/ 
 						//启动频率，加加速度，加加速时间，匀加速时间，减速时间
 	CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor1TimeTable,Motor1StepTable); 
-  CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor2TimeTable,Motor2StepTable); 	
+  	CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor2TimeTable,Motor2StepTable); 	
 	CalcMotorPeriStep_CPF(M_FRE_START,M_FRE_AA,M_T_AA,M_T_UA,M_T_RA,Motor3TimeTable,Motor3StepTable); 	
 }
 
@@ -782,18 +790,19 @@ void Find_BestTimeCost(unsigned char ID,unsigned long long time_cost,unsigned ch
 
 /**************************************************************************************
 启动电机按照S型曲线参数运行*/
+	//				                  电机ID，        方向，					位置偏移
 void Start_Motor_S(unsigned char MotorID,unsigned char dir,unsigned int Degree)
 {
   unsigned int PulsesGiven=0;
 	MOTOR_CONTROL_S *pmotor=NULL; 
-	if(Degree==0)
+	if(Degree==0)//运动偏移为当前位置不变
 	{ 		  	 
 		return;
 	}
 	switch(MotorID)
 	{
 		case 1:
-			pmotor=&motor1; 
+			pmotor=&motor1; //设置电机方向
 			if(0==dir)
 		  {
 		    GPIO_SetBits(GPIOE,GPIO_Pin_9);
@@ -926,10 +935,12 @@ void Reposition_Motor(unsigned char MotorID,unsigned int NewPos)
 		{
 			if(NewPos>pmotor_s->CurrentPosition)
 			{
+			//				电机ID，顺时针对应值，					位置偏移
 				Start_Motor_S(MotorID,pmotor_s->clockwise,NewPos-pmotor_s->CurrentPosition); 
 			}
 			else
 			{
+			//				  电机ID，逆时针对应值，                      位置偏移
 				Start_Motor_S(MotorID,!pmotor_s->clockwise,pmotor_s->CurrentPosition-NewPos);  	
 			}		 		 
 			while(pmotor_s->running==1);
@@ -1230,8 +1241,6 @@ void Do_Reset(unsigned char MotorID)
 		while(pmotor_spta->running==1);
 	}
 }
-
-
 void Deal_Serail_Cmd(char *buf,int len)
 {
     unsigned int dest=0;  
